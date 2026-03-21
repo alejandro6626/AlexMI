@@ -150,34 +150,8 @@
 </div>
 
 <script>
-const KEY = 'AIzaSyAb92-5OfyVAzJ2BvaHnJuqFLuOiE8rqcg';
-const URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=' + KEY;
-const SYS = "You are Alex, a Senior Pharmacovigilance MD. Provide evidence-based responses to HCPs regarding ADRs, DDIs, and safety. Structure: 1. Executive Summary; 2. Mechanism & Incidence; 3. Clinical Management; 4. References (PMIDs). Use CTCAE grading for severity. Differentiate between theoretical and clinically significant interactions. End every response with: 'Clinical decisions must be tailored to the individual patient profile. Verify with current SmPC/PI.'";
-
-const history = [
-    { role: 'user', parts: [{ text: `SYSTEM: ${SYS}\n\nAcknowledge initialization.` }]},
-    { role: 'model', parts: [{ text: "Medical information module ready." }]}
-];
-
-let busy = false;
-const inp = document.getElementById('inp');
-const msgs = document.getElementById('msgs');
-
-function resetHeight() { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; }
-inp.addEventListener('input', resetHeight);
-
-function addMsg(role, text){
-    document.getElementById('welcome')?.remove();
-    const d = document.createElement('div');
-    d.className = 'msg ' + role;
-    // Enhanced formatting for Markdown-style bolding and spacing
-    const formatted = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>');
-    d.innerHTML = `<div class="bubble">${formatted}</div>`;
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
-}
+// Replace with your Linux PC's Public IP or Dynamic DNS address
+const BACKEND_URL = 'http://YOUR_PUBLIC_IP:5000/chat';
 
 async function send(){
     if(busy || !inp.value.trim()) return;
@@ -187,57 +161,37 @@ async function send(){
     addMsg('user', text);
     history.push({role:'user', parts:[{text}]});
     
+    // Show Analyzing animation...
     const t = document.createElement('div');
     t.id = 'typing'; t.className = 'msg agent';
-    t.innerHTML = `<div class="bubble"><div class="typing-container"><div class="pulse-bar"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><span style="font-size:11px; font-weight:bold; color:#1a237e; letter-spacing:1px">ANALYZING...</span></div></div>`;
+    t.innerHTML = `<div class="bubble"><div class="typing-container"><div class="pulse-bar"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><span>ANALYZING...</span></div></div>`;
     msgs.appendChild(t); msgs.scrollTop = msgs.scrollHeight;
 
     try {
-        const res = await fetch(URL, {
+        const res = await fetch(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: history,
-                // Lower temperature for more consistent medical data
-                generationConfig: { temperature: 0.2, maxOutputTokens: 2048 } 
-            })
+            body: JSON.stringify({ contents: history })
         });
 
         const data = await res.json();
         t.remove();
 
-        // CHECK 1: API Level Errors
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
+        if (data.error) throw new Error(data.error.message || "Server Error");
 
-        // CHECK 2: Safety Filters (The most likely cause of your bug)
-        if (!data.candidates || data.candidates.length === 0) {
-            const reason = data.promptFeedback?.blockReason || "Safety Filter Block";
-            addMsg('agent', `⚠️ <strong>Analysis Halted:</strong> The query was flagged by internal safety filters (${reason}). Please rephrase to focus on general clinical mechanisms.`);
-            return;
-        }
-
-        const reply = data.candidates[0].content?.parts?.[0]?.text;
-        
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if(reply) {
             addMsg('agent', reply);
             history.push({role:'model', parts:[{text: reply}]});
-        } else {
-            addMsg('agent', 'No clinical data could be generated for this specific query.');
         }
-
     } catch(e) { 
         if(document.getElementById('typing')) t.remove();
-        addMsg('agent', `<strong>System Error:</strong> ${e.message}`); 
-        console.error("API Error:", e);
+        addMsg('agent', `<strong>Connection Error:</strong> Could not reach the secure backend.`);
+        console.error(e);
     } finally {
         busy = false;
-        // Keep focus on input for mobile flow
-        setTimeout(() => inp.focus(), 100);
     }
 }
-</script>
 </script>
 </body>
 </html>
