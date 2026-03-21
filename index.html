@@ -154,7 +154,6 @@ const KEY = 'AIzaSyAb92-5OfyVAzJ2BvaHnJuqFLuOiE8rqcg';
 const URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=' + KEY;
 const SYS = "You are Alex, a Senior Pharmacovigilance MD. Provide evidence-based responses to HCPs regarding ADRs, DDIs, and safety. Structure: 1. Executive Summary; 2. Mechanism & Incidence; 3. Clinical Management; 4. References (PMIDs). Use CTCAE grading for severity. Differentiate between theoretical and clinically significant interactions. End every response with: 'Clinical decisions must be tailored to the individual patient profile. Verify with current SmPC/PI.'";
 
-// Gemma 3 compatible history initialization
 const history = [
     { role: 'user', parts: [{ text: `SYSTEM: ${SYS}\n\nAcknowledge initialization.` }]},
     { role: 'model', parts: [{ text: "Medical information module ready." }]}
@@ -171,8 +170,10 @@ function addMsg(role, text){
     document.getElementById('welcome')?.remove();
     const d = document.createElement('div');
     d.className = 'msg ' + role;
-    // Basic formatting for bold and lines
-    const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    // Enhanced formatting for Markdown-style bolding and spacing
+    const formatted = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
     d.innerHTML = `<div class="bubble">${formatted}</div>`;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
@@ -195,21 +196,48 @@ async function send(){
         const res = await fetch(URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: history })
+            body: JSON.stringify({ 
+                contents: history,
+                // Lower temperature for more consistent medical data
+                generationConfig: { temperature: 0.2, maxOutputTokens: 2048 } 
+            })
         });
+
         const data = await res.json();
         t.remove();
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        // CHECK 1: API Level Errors
+        if (data.error) {
+            throw new Error(data.error.message);
+        }
+
+        // CHECK 2: Safety Filters (The most likely cause of your bug)
+        if (!data.candidates || data.candidates.length === 0) {
+            const reason = data.promptFeedback?.blockReason || "Safety Filter Block";
+            addMsg('agent', `⚠️ <strong>Analysis Halted:</strong> The query was flagged by internal safety filters (${reason}). Please rephrase to focus on general clinical mechanisms.`);
+            return;
+        }
+
+        const reply = data.candidates[0].content?.parts?.[0]?.text;
+        
         if(reply) {
             addMsg('agent', reply);
             history.push({role:'model', parts:[{text: reply}]});
+        } else {
+            addMsg('agent', 'No clinical data could be generated for this specific query.');
         }
+
     } catch(e) { 
-        t.remove(); 
-        addMsg('agent', 'Error connecting to intelligence cluster.'); 
+        if(document.getElementById('typing')) t.remove();
+        addMsg('agent', `<strong>System Error:</strong> ${e.message}`); 
+        console.error("API Error:", e);
+    } finally {
+        busy = false;
+        // Keep focus on input for mobile flow
+        setTimeout(() => inp.focus(), 100);
     }
-    busy = false;
 }
+</script>
 </script>
 </body>
 </html>
