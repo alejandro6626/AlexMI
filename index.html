@@ -93,10 +93,7 @@ async function send() {
     busy = true;
     sbtn.style.opacity = "0.3";
     addMsg('user', val);
-    
-    // Add only the user part to history
     history.push({ role: 'user', parts: [{ text: val }] });
-    
     inp.value = '';
     resetHeight();
 
@@ -107,40 +104,40 @@ async function send() {
     msgs.scrollTop = msgs.scrollHeight;
 
     try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 25000);
-
         const res = await fetch(BACKEND_URL, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'ngrok-skip-browser-warning': 'true' 
             },
-            body: JSON.stringify({ contents: history }),
-            signal: controller.signal
+            body: JSON.stringify({ contents: history })
         });
+
+        // 1. Check if the server actually responded
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || `HTTP Error ${res.status}`);
+        }
 
         const data = await res.json();
         document.getElementById('typing')?.remove();
 
-        // CHECK FOR ERRORS RETURNED FROM PYTHON
-        if (data.error) {
-            addMsg('agent', `<strong>Backend Error:</strong> ${data.error.message || JSON.stringify(data.error)}`, true);
-            return;
-        }
-
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (reply) {
+        // 2. Safely check for the reply
+        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+            const reply = data.candidates[0].content.parts[0].text;
             addMsg('agent', reply);
             history.push({ role: 'model', parts: [{ text: reply }] });
+        } else if (data.promptFeedback) {
+            addMsg('agent', "<strong>Safety Block:</strong> Query flagged by content filters.", true);
         } else {
-            addMsg('agent', "<strong>System:</strong> Received empty response. Check API safety filters.", true);
+            // This will show you exactly what the bad data looks like
+            console.error("Malformed Data:", data);
+            throw new Error("Invalid response format from AI.");
         }
 
     } catch (e) {
         document.getElementById('typing')?.remove();
-        addMsg('agent', `<strong>System Error:</strong> ${e.message}. Check ngrok and Python logs.`, true);
+        addMsg('agent', `<strong>Debug Info:</strong> ${e.message}`, true);
     } finally {
         busy = false;
         sbtn.style.opacity = "1";
