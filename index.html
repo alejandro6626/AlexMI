@@ -87,74 +87,63 @@ function addMsg(role, text, isError = false) {
 }
 
 async function send() {
-    console.log("Send triggered"); // Debugging check
     const val = inp.value.trim();
+    if (!val || busy) return;
+
+    busy = true;
+    sbtn.style.opacity = "0.3";
+    addMsg('user', val);
     
-    // Basic Interlock
-    if (!val) return;
-    if (busy) {
-        console.warn("System Busy - Lock Active");
-        return;
-    }
+    // Add only the user part to history
+    history.push({ role: 'user', parts: [{ text: val }] });
+    
+    inp.value = '';
+    resetHeight();
 
-    // 2. IMMEDIATE UI UPDATE (Before any network calls)
+    const t = document.createElement('div');
+    t.id = 'typing'; t.className = 'msg agent';
+    t.innerHTML = `<div class="bubble"><div class="typing-container"><div class="pulse-bar"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><span style="font-size:11px; font-weight:bold; color:#1a237e; margin-left:8px;">ANALYZING...</span></div></div>`;
+    msgs.appendChild(t);
+    msgs.scrollTop = msgs.scrollHeight;
+
     try {
-        busy = true;
-        sbtn.style.opacity = "0.3";
-        addMsg('user', val);
-        history.push({ role: 'user', parts: [{ text: val }] });
-        inp.value = '';
-        resetHeight();
-
-        // Show Analyzing Animation
-        const t = document.createElement('div');
-        t.id = 'typing'; t.className = 'msg agent';
-        t.innerHTML = `<div class="bubble"><div class="typing-container"><div class="pulse-bar"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><span style="font-size:11px; font-weight:bold; color:#1a237e; margin-left:8px;">ANALYZING...</span></div></div>`;
-        msgs.appendChild(t);
-        msgs.scrollTop = msgs.scrollHeight;
-
-        // 3. NETWORK CALL
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), 25000);
 
         const res = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: { 
-           'Content-Type': 'application/json',
-           'ngrok-skip-browser-warning': 'true' // <--- ADD THIS LINE
-        },
-        body: JSON.stringify({ contents: history }),
-        signal: controller.signal
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true' 
+            },
+            body: JSON.stringify({ contents: history }),
+            signal: controller.signal
         });
 
-        clearTimeout(timeout);
         const data = await res.json();
-        
-        // Remove typing indicator
         document.getElementById('typing')?.remove();
 
-        if (data.error) throw new Error(data.error.message || "Server Error");
+        // CHECK FOR ERRORS RETURNED FROM PYTHON
+        if (data.error) {
+            addMsg('agent', `<strong>Backend Error:</strong> ${data.error.message || JSON.stringify(data.error)}`, true);
+            return;
+        }
 
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
         if (reply) {
             addMsg('agent', reply);
             history.push({ role: 'model', parts: [{ text: reply }] });
         } else {
-            addMsg('agent', "<strong>Warning:</strong> No response data received.", true);
+            addMsg('agent', "<strong>System:</strong> Received empty response. Check API safety filters.", true);
         }
 
     } catch (e) {
         document.getElementById('typing')?.remove();
-        let errorText = "<strong>System Error:</strong> ";
-        if (e.name === 'AbortError') errorText += "Backend timed out (12s).";
-        else errorText += "Connection failed. Is your Linux PC reachable?";
-        addMsg('agent', errorText, true);
-        console.error("Critical Failure:", e);
+        addMsg('agent', `<strong>System Error:</strong> ${e.message}. Check ngrok and Python logs.`, true);
     } finally {
-        // 4. FAIL-SAFE RESET
         busy = false;
         sbtn.style.opacity = "1";
-        setTimeout(() => inp.focus(), 150);
     }
 }
 </script>
