@@ -148,60 +148,74 @@
 </div>
 
 <script>
-/**
- * REPLACEMENT: Point this to your Linux machine.
- * If using HTTPS (recommended), ensure your backend has an SSL cert or use a tunnel.
- */
 const BACKEND_URL = 'http://YOUR_LINUX_IP_OR_DNS:5000/chat';
 
 let busy = false;
 const inp = document.getElementById('inp');
 const msgs = document.getElementById('msgs');
+const sbtn = document.getElementById('sbtn');
 
-// Conversation history starts empty; the backend will handle the System Prompt if you prefer,
-// but we'll keep it here for continuity.
 const history = [
     { role: 'user', parts: [{ text: "Initialize as Senior Pharmacovigilance MD Alex." }]},
     { role: 'model', parts: [{ text: "System ready." }]}
 ];
 
-function resetHeight() { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; }
-inp.addEventListener('input', resetHeight);
-
-function addMsg(role, text){
+function addMsg(role, text, isError = false){
     document.getElementById('welcome')?.remove();
     const d = document.createElement('div');
     d.className = 'msg ' + role;
+    const colorStyle = isError ? 'style="color: #b71c1c; border-left-color: #b71c1c;"' : '';
     const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-    d.innerHTML = `<div class="bubble">${formatted}</div>`;
+    d.innerHTML = `<div class="bubble" ${colorStyle}>${formatted}</div>`;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
 }
 
 async function send(){
-    if(busy || !inp.value.trim()) return;
+    // Ensure the button always "works" by checking the input first
     const text = inp.value.trim();
-    inp.value = ''; resetHeight();
+    if(!text) return;
+
+    // If a request is already in progress, don't overlap
+    if(busy) {
+        console.log("System busy: Request ignored.");
+        return;
+    }
+
+    // UI Updates
     busy = true;
+    sbtn.style.opacity = "0.5";
+    inp.value = ''; 
+    resetHeight();
     addMsg('user', text);
     history.push({role:'user', parts:[{text}]});
     
+    // Create Typing/Analyzing Indicator
     const t = document.createElement('div');
     t.id = 'typing'; t.className = 'msg agent';
     t.innerHTML = `<div class="bubble"><div class="typing-container"><div class="pulse-bar"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><span style="font-size:11px; font-weight:bold; color:#1a237e; letter-spacing:1px">ANALYZING...</span></div></div>`;
-    msgs.appendChild(t); msgs.scrollTop = msgs.scrollHeight;
+    msgs.appendChild(t); 
+    msgs.scrollTop = msgs.scrollHeight;
 
     try {
+        // Set a 10-second timeout for the fetch
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
         const res = await fetch(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: history })
+            body: JSON.stringify({ contents: history }),
+            signal: controller.signal
         });
 
+        clearTimeout(timeoutId);
         const data = await res.json();
         t.remove();
 
-        if (data.error) throw new Error(data.error.message || "Backend Error");
+        if (!res.ok || data.error) {
+            throw new Error(data.error || `Server returned ${res.status}`);
+        }
 
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if(reply) {
@@ -209,11 +223,22 @@ async function send(){
             history.push({role:'model', parts:[{text: reply}]});
         }
     } catch(e) { 
-        if(document.getElementById('typing')) t.remove();
-        addMsg('agent', `<strong>Backend Connection Error:</strong> Check if your Linux server is running and port 5000 is open.`);
-        console.error(e);
+        t.remove();
+        let errorMsg = "<strong>COMMUNICATION FAULT:</strong> ";
+        
+        if (e.name === 'AbortError') {
+            errorMsg += "Request timed out. The backend is taking too long to respond.";
+        } else if (e.message.includes('Failed to fetch')) {
+            errorMsg += "Backend Offline. Ensure your Linux PC is running and port 5000 is forwarded.";
+        } else {
+            errorMsg += e.message;
+        }
+        
+        addMsg('agent', errorMsg, true);
     } finally {
         busy = false;
+        sbtn.style.opacity = "1";
+        inp.focus();
     }
 }
 </script>
