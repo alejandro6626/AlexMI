@@ -72,13 +72,34 @@ const history = [];
 function resetHeight() { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; }
 inp.addEventListener('input', resetHeight);
 
+// Add this configuration BEFORE your addMsg function
+marked.setOptions({
+    breaks: true,
+    gfm: true
+});
+
+// Custom renderer to force links to open in a new tab
+const renderer = new marked.Renderer();
+renderer.link = function(href, title, text) {
+    return `<a href="${href}" title="${title || ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+};
+
 function addMsg(role, text, isError = false) {
     document.getElementById('welcome')?.remove();
     const d = document.createElement('div');
     d.className = 'msg ' + role;
-    const style = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
-    const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-    d.innerHTML = `<div class="bubble" ${style}>${formatted}</div>`;
+    
+    let content;
+    if (role === 'user') {
+        content = text.replace(/\n/g, '<br>');
+    } else {
+        // Use the custom renderer here
+        content = marked.parse(text, { renderer: renderer }); 
+    }
+
+    const errorStyle = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
+    d.innerHTML = `<div class="bubble" ${errorStyle}>${content}</div>`;
+    
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
 }
