@@ -88,18 +88,17 @@ function addMsg(role, text, isError = false) {
     document.getElementById('welcome')?.remove();
     const d = document.createElement('div');
     d.className = 'msg ' + role;
+    const style = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
     
-    let content;
-    if (role === 'user') {
-        content = text.replace(/\n/g, '<br>');
-    } else {
-        // Use the custom renderer here
-        content = marked.parse(text, { renderer: renderer }); 
+    // 1. First, handle the bolding **text**
+    let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // 2. Handle new lines, but ONLY if they aren't already handled by <br> tags from the backend
+    if (!formatted.includes('<br>')) {
+        formatted = formatted.replace(/\n/g, '<br>');
     }
-
-    const errorStyle = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
-    d.innerHTML = `<div class="bubble" ${errorStyle}>${content}</div>`;
     
+    d.innerHTML = `<div class="bubble" ${style}>${formatted}</div>`;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
 }
