@@ -90,12 +90,27 @@ function addMsg(role, text, isError = false) {
     d.className = 'msg ' + role;
     const style = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
     
-    // 1. Convert bold markdown
-    let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // 2. Preserve the <a href> tags and <br> tags from backend, otherwise convert \n
-    if (!formatted.includes('<br>') && !formatted.includes('<a')) {
+    let formatted = text;
+
+    if (role === 'agent') {
+        // 1. Fix "Wildcards": Convert markdown list asterisks (*) into clean bullet points
+        formatted = formatted.replace(/^\s*\*\s+/gm, '• ');
+        
+        // 2. Fix "Bold Wildcards": If it looks like "* Myalgia:", make it "<strong>Myalgia:</strong>"
+        formatted = formatted.replace(/\*\s+\*\*(.*?)\*\*:/g, '<strong>$1:</strong>');
+
+        // 3. Fix "Bold Text": Standard **bold** to <strong>
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // 4. Fix "Chunky Text": Ensure double newlines create a real paragraph break
+        // We replace double newlines with a spacing div for better clinical readability
+        formatted = formatted.replace(/\n\n/g, '<div style="margin-bottom: 12px;"></div>');
+        
+        // 5. Fix "Carrier Returns": Convert single newlines to <br>
         formatted = formatted.replace(/\n/g, '<br>');
+    } else {
+        // User messages stay simple
+        formatted = text.replace(/\n/g, '<br>');
     }
     
     d.innerHTML = `<div class="bubble" ${style}>${formatted}</div>`;
