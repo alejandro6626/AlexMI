@@ -90,11 +90,11 @@ function addMsg(role, text, isError = false) {
     d.className = 'msg ' + role;
     const style = isError ? 'style="border-left: 5px solid #d32f2f; background: #fff5f5;"' : '';
     
-    // 1. First, handle the bolding **text**
+    // 1. Convert bold markdown
     let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
-    // 2. Handle new lines, but ONLY if they aren't already handled by <br> tags from the backend
-    if (!formatted.includes('<br>')) {
+    // 2. Preserve the <a href> tags and <br> tags from backend, otherwise convert \n
+    if (!formatted.includes('<br>') && !formatted.includes('<a')) {
         formatted = formatted.replace(/\n/g, '<br>');
     }
     
